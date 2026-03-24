@@ -1,0 +1,17 @@
+name = "positionpilot-worker"
+main = "src/index.js"
+compatibility_date = "2024-12-01"
+
+# 5分ごとに株価チェック
+[triggers]
+crons = ["*/5 * * * *"]
+
+# KVストレージ（デプロイ後にIDを設定する）
+[[kv_namespaces]]
+binding = "KV"
+id = "YOUR_KV_NAMESPACE_ID_HERE"
+
+# 以下はCLIで設定（ファイルには書かない）:
+# wrangler secret put LINE_CHANNEL_TOKEN   ← Messaging APIのチャネルアクセストークン
+# wrangler secret put LINE_USER_ID         ← 自分のLINEユーザーID
+# wrangler secret put API_TOKEN            ← フロントエンド認証用（任意の文字列）

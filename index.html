@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PositionPilot - ルールで投資する</title>
+  <meta name="description" content="PositionPilot（ポジションパイロット）は感情ではなくルールで投資するための株式ポジション管理アプリです。ナンピンタイミングの通知、利益確定タイミングの通知、現在ポジションの安全度可視化を提供します。" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- ナビゲーション -->
+  <nav class="navbar" id="navbar">
+    <div class="nav-container">
+      <div class="nav-logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M16 2L28 8v16l-12 6L4 24V8L16 2z" fill="url(#logoGrad)" opacity="0.9"/>
+            <path d="M16 6l9 4.5v9L16 24l-9-4.5v-9L16 6z" fill="rgba(255,255,255,0.15)"/>
+            <path d="M10 16l4 4 8-8" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs>
+              <linearGradient id="logoGrad" x1="4" y1="2" x2="28" y2="30" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#6366f1"/>
+                <stop offset="100%" stop-color="#8b5cf6"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <span class="logo-text">PositionPilot</span>
+      </div>
+      <div class="nav-tabs">
+        <button class="nav-tab active" id="tab-dashboard" onclick="showPage('dashboard')">
+          <span class="tab-icon">📊</span>ダッシュボード
+        </button>
+        <button class="nav-tab" id="tab-stocks" onclick="showPage('stocks')">
+          <span class="tab-icon">📋</span>銘柄管理
+        </button>
+        <button class="nav-tab" id="tab-register" onclick="showPage('register')">
+          <span class="tab-icon">➕</span>銘柄登録
+        </button>
+        <button class="nav-tab" id="tab-log" onclick="showPage('log')">
+          <span class="tab-icon">📈</span>利益ログ
+        </button>
+      </div>
+      <div class="nav-actions">
+        <button class="btn btn-ghost btn-sm" id="sync-worker-btn" onclick="syncToWorker()" title="Workerに銘柄データを同期" style="font-size:12px; padding:6px 10px;">
+          ☁️ Workerに同期
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="openWorkerSettings()" title="Worker接続設定" style="font-size:12px; padding:6px 8px;">
+          ⚙️
+        </button>
+        <div class="notification-btn" id="notif-btn" onclick="toggleNotifications()">
+          <span>🔔</span>
+          <span class="notif-badge" id="notif-badge">2</span>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- 通知パネル -->
+  <div class="notification-panel" id="notif-panel">
+    <div class="notif-header">
+      <h3>🔔 アクション通知</h3>
+      <button onclick="toggleNotifications()" class="close-btn">✕</button>
+    </div>
+    <div class="notif-list" id="notif-list">
+      <!-- 通知はJSで動的生成 -->
+    </div>
+  </div>
+  <div class="notif-overlay" id="notif-overlay" onclick="toggleNotifications()"></div>
+
+  <main class="main-content">
+
+    <!-- ========== ダッシュボード ========== -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
+          <div>
+            <h1 class="page-title">ダッシュボード</h1>
+            <p class="page-subtitle">ポートフォリオの現状を一目で把握</p>
+          </div>
+          <!-- 株価取得UIバー -->
+          <div class="price-fetch-bar">
+            <button class="btn btn-primary" id="fetch-all-btn" onclick="updateAllPrices()">
+              📡 株価を一括取得
+            </button>
+            <button class="btn btn-ghost" id="auto-refresh-btn" onclick="toggleAutoRefresh()">
+              🔄 自動更新: OFF
+            </button>
+            <div class="last-updated-block">
+              <span style="font-size:11px; color:var(--text-muted);">最終更新</span>
+              <span class="last-updated-time" id="last-updated-label">未取得</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- サマリーカード -->
+      <div class="summary-grid">
+        <div class="summary-card card-total">
+          <div class="summary-icon">💰</div>
+          <div class="summary-info">
+            <div class="summary-label">総資産（推定）</div>
+            <div class="summary-value" id="total-assets">¥0</div>
+            <div class="summary-change" id="total-change">--</div>
+          </div>
+        </div>
+        <div class="summary-card card-danger">
+          <div class="summary-icon">🔴</div>
+          <div class="summary-info">
+            <div class="summary-label">行動必要銘柄</div>
+            <div class="summary-value" id="action-needed">0件</div>
+            <div class="summary-sub">ナンピン/損切り</div>
+          </div>
+        </div>
+        <div class="summary-card card-warning">
+          <div class="summary-icon">🟡</div>
+          <div class="summary-info">
+            <div class="summary-label">対応待ち銘柄</div>
+            <div class="summary-value" id="sell-ready">0件</div>
+            <div class="summary-sub">利確/ナンピン検討ゾーン到達</div>
+          </div>
+        </div>
+        <div class="summary-card card-safe">
+          <div class="summary-icon">🟢</div>
+          <div class="summary-info">
+            <div class="summary-label">安全銘柄</div>
+            <div class="summary-value" id="safe-count">0件</div>
+            <div class="summary-sub">HOLD推奨</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ポートフォリオグラフ -->
+      <div class="section-grid">
+        <div class="glass-card chart-card">
+          <div class="card-header">
+            <h2 class="card-title">ポートフォリオ内訳</h2>
+          </div>
+          <div class="chart-container">
+            <canvas id="portfolioChart"></canvas>
+          </div>
+        </div>
+        <div class="glass-card chart-card">
+          <div class="card-header">
+            <h2 class="card-title">テーマ別投資配分</h2>
+          </div>
+          <div class="chart-container">
+            <canvas id="themeChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- 銘柄カード一覧 -->
+      <div class="glass-card">
+        <div class="card-header">
+          <h2 class="card-title">保有銘柄 一覧</h2>
+          <div class="filter-tabs">
+            <button class="filter-tab active" onclick="filterStocks('all', this)">全て</button>
+            <button class="filter-tab" onclick="filterStocks('danger', this)">🔴 行動</button>
+            <button class="filter-tab" onclick="filterStocks('warning', this)">🟡 検討</button>
+            <button class="filter-tab" onclick="filterStocks('safe', this)">🟢 安全</button>
+          </div>
+        </div>
+        <div class="stock-cards-grid" id="stock-cards-grid">
+          <!-- 銘柄カードはJSで動的生成 -->
+        </div>
+        <div class="empty-state" id="empty-state" style="display:none;">
+          <div class="empty-icon">📭</div>
+          <p>銘柄が登録されていません</p>
+          <button class="btn btn-primary" onclick="showPage('register')">最初の銘柄を登録する</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 銘柄管理 ========== -->
+    <div class="page" id="page-stocks">
+      <div class="page-header">
+        <h1 class="page-title">銘柄管理</h1>
+        <p class="page-subtitle">保有銘柄の詳細情報と設計を管理</p>
+      </div>
+
+      <!-- 全体合計の含み損益 -->
+      <div id="stocks-total-summary" style="margin-bottom:20px; background:linear-gradient(135deg,rgba(99,102,241,0.18),rgba(139,92,246,0.12)); border:1px solid rgba(99,102,241,0.35); border-radius:var(--radius-md); padding:16px 20px; display:flex; align-items:center; justify-content:space-between; display:none;">
+        <div>
+          <div style="font-size:13px; color:var(--color-accent); font-weight:600; letter-spacing:0.5px;">保有銘柄 全体含み損益</div>
+          <div style="font-size:28px; font-weight:900; font-family:'Inter',sans-serif; color:var(--text-primary);" id="stocks-total-val">¥0</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:12px; color:var(--text-muted);">総投資額比</div>
+          <div style="font-size:20px; font-weight:800; font-family:'Inter',sans-serif;" id="stocks-total-pct">--%</div>
+        </div>
+      </div>
+
+      <div class="stock-list-container" id="stock-list-container">
+        <!-- 銘柄詳細はJSで動的生成 -->
+      </div>
+
+      <div class="empty-state" id="stocks-empty-state" style="display:none;">
+        <div class="empty-icon">📊</div>
+        <p>銘柄が登録されていません</p>
+        <button class="btn btn-primary" onclick="showPage('register')">最初の銘柄を登録する</button>
+      </div>
+    </div>
+
+    <!-- ========== 銘柄登録 ========== -->
+    <div class="page" id="page-register">
+      <div class="page-header">
+        <h1 class="page-title">銘柄登録</h1>
+        <p class="page-subtitle">新しい銘柄を登録して投資計画を自動計算</p>
+      </div>
+
+      <div class="form-grid">
+        <!-- 入力フォーム -->
+        <div class="glass-card form-card">
+          <div class="card-header">
+            <h2 class="card-title">📋 銘柄情報を入力</h2>
+          </div>
+          <form id="stock-form" class="stock-form" onsubmit="registerStock(event)">
+            <!-- 新規追加：市場選択 -->
+            <div class="form-group" style="margin-bottom:20px;">
+              <label class="form-label" style="margin-bottom:8px;">市場・国 <span class="required">*</span></label>
+              <div style="display:flex; gap:16px;">
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                  <input type="radio" name="input-market" value="jp" checked onchange="toggleMarketUI()" />
+                  🇯🇵 日本株
+                </label>
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                  <input type="radio" name="input-market" value="us" onchange="toggleMarketUI()" />
+                  🇺🇸 米国株
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">銘柄名 <span class="required">*</span></label>
+              <input type="text" id="input-name" class="form-input" placeholder="例：○○半導体" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label" id="label-code">証券コード</label>
+              <input type="text" id="input-code" class="form-input" placeholder="例：7203" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">テーマタグ</label>
+              <div class="tag-selector" id="tag-selector">
+                <button type="button" class="tag-btn" onclick="toggleTag(this, 'AI')">🤖 AI</button>
+                <button type="button" class="tag-btn" onclick="toggleTag(this, '半導体')">💡 半導体</button>
+                <button type="button" class="tag-btn" onclick="toggleTag(this, '電力')">⚡ 電力</button>
+                <button type="button" class="tag-btn" onclick="toggleTag(this, '金融')">🏦 金融</button>
+                <button type="button" class="tag-btn" onclick="toggleTag(this, '医療')">🏥 医療</button>
+                <button type="button" class="tag-btn" onclick="toggleTag(this, 'レアアース')">💎 レアアース</button>
+                <button type="button" class="tag-btn" onclick="toggleTag(this, 'キャリア通信')">📱 キャリア通信</button>
+                <button type="button" class="tag-btn" onclick="toggleTag(this, '自動車')">🚙 自動車</button>
+                <button type="button" class="tag-btn" onclick="toggleTag(this, '建設')">🏗️ 建設</button>
+                <button type="button" class="tag-btn" onclick="toggleTag(this, '化学')">🧪 化学</button>
+                <button type="button" class="tag-btn" onclick="toggleTag(this, '石油・石炭')">🛢️ 石油・石炭</button>
+                <button type="button" class="tag-btn" id="tag-other-btn" onclick="toggleOtherTag(this)">📦 その他</button>
+              </div>
+              <input type="text" id="input-custom-tag" class="form-input" placeholder="独自のテーマを入力 (複数入力はカンマ区切り)" style="display:none; margin-top:10px;" />
+            </div>
+            <!-- ===== 日本株用フィールド ===== -->
+            <div id="jp-fields">
+              <div class="form-group">
+                <label class="form-label">初回購入価格（円） <span class="required">*</span></label>
+                <input type="number" id="input-price" class="form-input" placeholder="1000" min="1" required oninput="calcPreview()" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">現在株価（円）</label>
+                <input type="number" id="input-current" class="form-input" placeholder="未入力の場合は初回価格を使用" min="0" oninput="calcPreview()" />
+              </div>
+            </div>
+
+            <!-- ===== 米国株用フィールド ====== -->
+            <div id="us-fields" style="display:none; background:rgba(0,0,0,0.1); padding:16px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); margin-bottom:16px;">
+              <div class="form-row" style="margin-bottom:16px;">
+                <div class="form-group">
+                  <label class="form-label">初回購入価格（USドル） <span class="required">*</span></label>
+                  <input type="number" id="input-usd-price" class="form-input" placeholder="150" min="0.1" step="0.01" oninput="calcPreview()" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">想定為替レート（円/USD） <span class="required">*</span></label>
+                  <input type="number" id="input-usd-rate" class="form-input" placeholder="150" min="1" step="0.1" value="150" oninput="calcPreview()" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">現在株価（USドル）</label>
+                <input type="number" id="input-usd-current" class="form-input" placeholder="未入力の場合は初回価格を使用" min="0" step="0.01" oninput="calcPreview()" />
+              </div>
+            </div>
+
+            <!-- ===== 共通フィールド ====== -->
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">予定投資総額（万円） <span class="required">*</span></label>
+                <input type="number" id="input-budget" class="form-input" placeholder="10" min="0.1" step="0.1" required oninput="calcPreview()" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">現在保有株数</label>
+                <input type="number" id="input-shares" class="form-input" placeholder="100" min="0" oninput="calcPreview()" />
+              </div>
+            </div>
+            
+            <div class="form-group" style="margin-top:16px;">
+              <button type="button" class="btn btn-ghost btn-full" style="border:1px dashed var(--border-color); display:flex; justify-content:center; align-items:center; gap:8px;" onclick="const el = document.getElementById('plan-settings-area'); el.style.display = el.style.display === 'none' ? 'block' : 'none';">
+                ⚙️ 投資ルール詳細設定（任意）
+              </button>
+              <div id="plan-settings-area" style="display:none; margin-top:12px; padding:16px; background:var(--bg-card-hover); border-radius:var(--radius-md); border:1px solid var(--border-color);">
+                <div class="form-row" style="margin-bottom:12px;">
+                  <div class="form-group">
+                    <label class="form-label">ナンピン① 下落率(%)</label>
+                    <input type="number" id="input-np1-pct" class="form-input" value="15" min="1" max="99" oninput="calcPreview()" />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">ナンピン② 下落率(%)</label>
+                    <input type="number" id="input-np2-pct" class="form-input" value="30" min="1" max="99" oninput="calcPreview()" />
+                  </div>
+                </div>
+                <div class="form-row" style="margin-bottom:12px;">
+                  <div class="form-group">
+                    <label class="form-label">損切り 下落率(%)</label>
+                    <input type="number" id="input-stop-pct" class="form-input" value="45" min="1" max="99" oninput="calcPreview()" />
+                  </div>
+                </div>
+                <div class="form-row" style="margin-bottom:12px;">
+                  <div class="form-group">
+                    <label class="form-label">利確① 上昇率(%)</label>
+                    <input type="number" id="input-tp1-pct" class="form-input" value="20" min="1" max="999" oninput="calcPreview()" />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">利確① 売却割合</label>
+                    <select id="input-tp1-frac" class="form-input" onchange="calcPreview()">
+                      <option value="1">全株売却</option>
+                      <option value="2">1/2 (半分) 売却</option>
+                      <option value="3" selected>1/3 売却</option>
+                      <option value="4">1/4 売却</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">利確② 上昇率(%)</label>
+                    <input type="number" id="input-tp2-pct" class="form-input" value="40" min="1" max="999" oninput="calcPreview()" />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">利確② 売却割合</label>
+                    <select id="input-tp2-frac" class="form-input" onchange="calcPreview()">
+                      <option value="1">全株売却</option>
+                      <option value="2">1/2 (半分) 売却</option>
+                      <option value="3" selected>1/3 売却</option>
+                      <option value="4">1/4 売却</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-full" id="submit-btn">
+              <span>✨ 銘柄を登録して計画を作成</span>
+            </button>
+          </form>
+          <div id="edit-mode-bar" class="edit-mode-bar" style="display:none;">
+            <span class="edit-indicator">✏️ 編集モード</span>
+            <button class="btn btn-ghost" onclick="cancelEdit()">キャンセル</button>
+          </div>
+        </div>
+
+        <!-- プレビュー -->
+        <div class="glass-card preview-card" id="preview-card">
+          <div class="card-header">
+            <h2 class="card-title">📐 投資計画プレビュー</h2>
+          </div>
+          <div id="preview-content" class="preview-empty">
+            <div class="empty-icon">🎯</div>
+            <p>価格と予算を入力すると<br/>自動計算されます</p>
+          </div>
+          <div id="preview-result" style="display:none;">
+            <div class="preview-stock-name" id="prev-name">--</div>
+            <div class="preview-section">
+              <div class="preview-section-title">📉 ナンピン計画</div>
+              <div class="price-levels">
+                <div class="price-level price-buy1">
+                  <div class="level-label">初回エントリー（50%）</div>
+                  <div class="level-price" id="prev-entry">-- 円</div>
+                  <div class="level-amount" id="prev-entry-amt">-- 万円</div>
+                </div>
+                <div class="price-level price-buy2">
+                  <div class="level-label" id="prev-np1-label">ナンピン① (-15%)</div>
+                  <div class="level-price" id="prev-np1">-- 円</div>
+                  <div class="level-amount" id="prev-np1-amt">-- 万円</div>
+                </div>
+                <div class="price-level price-buy3">
+                  <div class="level-label" id="prev-np2-label">ナンピン② (-30%)</div>
+                  <div class="level-price" id="prev-np2">-- 円</div>
+                  <div class="level-amount" id="prev-np2-amt">-- 万円</div>
+                </div>
+                <div class="price-level price-stop">
+                  <div class="level-label" id="prev-stop-label">損切りライン (-45%)</div>
+                  <div class="level-price" id="prev-stop">-- 円</div>
+                </div>
+              </div>
+            </div>
+            <div class="preview-section">
+              <div class="preview-section-title">📈 利確計画</div>
+              <div class="price-levels">
+                <div class="price-level price-sell1">
+                  <div class="level-label" id="prev-tp1-label">利確① (+20%) - 1/3売却</div>
+                  <div class="level-price" id="prev-tp1">-- 円</div>
+                </div>
+                <div class="price-level price-sell2">
+                  <div class="level-label" id="prev-tp2-label">利確② (+40%) - 1/3売却</div>
+                  <div class="level-price" id="prev-tp2">-- 円</div>
+                </div>
+                <div class="price-level price-sell3">
+                  <div class="level-label">残り → トレンド終了監視</div>
+                  <div class="level-price">📡 監視中</div>
+                </div>
+              </div>
+            </div>
+            <div class="preview-section">
+              <div class="preview-section-title">💼 投資計画サマリー</div>
+              <div class="summary-rows">
+                <div class="summary-row">
+                  <span class="row-label">予定総投資額</span>
+                  <span class="row-value" id="prev-total-budget">-- 万円</span>
+                </div>
+                <div class="summary-row">
+                  <span class="row-label">初回投資額（50%）</span>
+                  <span class="row-value" id="prev-first-invest">-- 万円</span>
+                </div>
+                <div class="summary-row">
+                  <span class="row-label">平均取得単価（想定）</span>
+                  <span class="row-value" id="prev-avg-price">-- 円</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 利益ログ ========== -->
+    <div class="page" id="page-log">
+      <div class="page-header">
+        <h1 class="page-title">利益ログ</h1>
+        <p class="page-subtitle">利確履歴を記録して投資の自信を積み上げる</p>
+      </div>
+
+      <div class="summary-grid">
+        <div class="summary-card card-total">
+          <div class="summary-icon">🏆</div>
+          <div class="summary-info">
+            <div class="summary-label">累計確定利益</div>
+            <div class="summary-value" id="total-profit">¥0</div>
+          </div>
+        </div>
+        <div class="summary-card card-safe">
+          <div class="summary-icon">📊</div>
+          <div class="summary-info">
+            <div class="summary-label">勝率</div>
+            <div class="summary-value" id="win-rate">--%</div>
+          </div>
+        </div>
+        <div class="summary-card card-warning">
+          <div class="summary-icon">🔄</div>
+          <div class="summary-info">
+            <div class="summary-label">総トレード数</div>
+            <div class="summary-value" id="trade-count">0回</div>
+          </div>
+        </div>
+        <div class="summary-card card-danger">
+          <div class="summary-icon">📉</div>
+          <div class="summary-info">
+            <div class="summary-label">最大ドローダウン</div>
+            <div class="summary-value" id="max-dd">--%</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass-card">
+        <div class="card-header">
+          <h2 class="card-title">📈 利益推移グラフ</h2>
+        </div>
+        <div class="chart-container chart-tall">
+          <canvas id="profitChart"></canvas>
+        </div>
+      </div>
+
+      <div class="glass-card">
+        <div class="card-header">
+          <h2 class="card-title">📋 利確履歴</h2>
+          <button class="btn btn-primary btn-sm" onclick="openLogModal()">＋ 利確を記録</button>
+        </div>
+        <div class="log-table-wrapper">
+          <table class="log-table" id="log-table">
+            <thead>
+              <tr>
+                <th>日付</th>
+                <th>銘柄</th>
+                <th>利確種別</th>
+                <th>利益率</th>
+                <th>利益額</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="log-tbody">
+              <!-- ログはJSで動的生成 -->
+            </tbody>
+          </table>
+          <div class="empty-state" id="log-empty-state">
+            <div class="empty-icon">📝</div>
+            <p>まだ利確ログがありません<br/>利確したらここに記録しましょう</p>
+            <button class="btn btn-primary" onclick="openLogModal()">最初の利確を記録する</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ========== 銘柄詳細モーダル ========== -->
+  <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+    <div class="modal" id="stock-modal">
+      <button class="modal-close" onclick="closeStockModal()">✕</button>
+      <div class="modal-content" id="modal-content">
+        <!-- モーダル内容はJSで動的生成 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 現在株価更新モーダル ========== -->
+  <div class="modal-overlay" id="price-modal-overlay" onclick="closePriceModal(event)">
+    <div class="modal modal-sm" id="price-modal">
+      <button class="modal-close" onclick="closePriceModal()">✕</button>
+      <h2 class="modal-title">現在株価を更新</h2>
+      <div class="form-group">
+        <label class="form-label">銘柄名</label>
+        <div class="modal-stock-name" id="price-modal-stock-name">--</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">現在株価（円）</label>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input type="number" id="price-input" class="form-input" placeholder="現在の株価を入力" min="0" style="flex:1;" />
+          <button id="auto-fetch-single-btn" class="btn btn-ghost btn-sm"
+            onclick="fetchSinglePrice(updatePriceStockId)"
+            style="white-space:nowrap; min-width:90px;">🔍 自動取得</button>
+        </div>
+        <div id="auto-fetch-status" style="font-size:11px; color:var(--text-muted); margin-top:4px; min-height:16px;"></div>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="savePriceUpdate()">更新する</button>
+    </div>
+  </div>
+
+  <!-- ========== 利確ログ記録モーダル ========== -->
+  <div class="modal-overlay" id="log-modal-overlay" onclick="closeLogModal(event)">
+    <div class="modal modal-sm" id="log-modal">
+      <button class="modal-close" onclick="closeLogModal()">✕</button>
+      <h2 class="modal-title">📈 利確を記録</h2>
+      <div class="form-group">
+        <label class="form-label">銘柄を選択</label>
+        <select class="form-input" id="log-stock-select">
+          <option value="">銘柄を選択...</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">利確種別</label>
+          <select class="form-input" id="log-type-select">
+            <option value="利確①">利確①（1/3売却）</option>
+            <option value="利確②">利確②（1/3売却）</option>
+            <option value="全株売却">全株売却</option>
+            <option value="損切り">損切り</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">売却価格（円）</label>
+          <input type="number" id="log-sell-price" class="form-input" placeholder="売却価格" min="0" oninput="calcLogProfit()" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">購入時単価（円）</label>
+          <input type="number" id="log-buy-price" class="form-input" placeholder="購入時の価格" min="0" oninput="calcLogProfit()" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">売却株数</label>
+          <input type="number" id="log-shares" class="form-input" placeholder="売却した株数" min="0" oninput="calcLogProfit()" />
+        </div>
+      </div>
+      <div class="log-profit-preview" id="log-profit-preview" style="display:none;">
+        <div class="profit-preview-row">
+          <span>利益率</span><span class="profit-rate" id="log-profit-rate">--%</span>
+        </div>
+        <div class="profit-preview-row">
+          <span>利益額</span><span class="profit-amount" id="log-profit-amount">--円</span>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="saveLog()">記録する</button>
+    </div>
+  </div>
+
+  <!-- ========== ナンピン買いモーダル ========== -->
+  <div class="modal-overlay" id="nanpin-modal-overlay" onclick="closeNanpinModal(event)">
+    <div class="modal modal-sm" id="nanpin-modal">
+      <button class="modal-close" onclick="closeNanpinModal()">✕</button>
+      <h2 class="modal-title">📉 ナンピン買い実行</h2>
+      <div class="modal-stock-name" id="nanpin-stock-name">--</div>
+      <div id="nanpin-suggestion" style="margin-bottom:14px;"></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">購入価格（円） <span class="required">*</span></label>
+          <input type="number" id="nanpin-price-in" class="form-input" min="1" oninput="calcNanpinPreview()" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">購入株数 <span class="required">*</span></label>
+          <input type="number" id="nanpin-shares-in" class="form-input" min="1" oninput="calcNanpinPreview()" />
+        </div>
+      </div>
+      <div class="trade-preview" id="nanpin-preview" style="display:none;">
+        <div class="trade-prev-row"><span>現在の平均単価</span><span id="np-before-avg">--</span></div>
+        <div class="trade-prev-row highlight"><span>★ NP後の平均単価</span><span id="np-after-avg" style="font-size:18px;">--</span></div>
+        <div class="trade-prev-row"><span>NP後の保有株数</span><span id="np-after-shares">--</span></div>
+        <div class="trade-prev-row"><span>今回の購入金額</span><span id="np-cost">--</span></div>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="saveNanpin()">📉 ナンピン実行</button>
+    </div>
+  </div>
+
+  <!-- ========== 利確実行モーダル ========== -->
+  <div class="modal-overlay" id="qs-overlay" onclick="closeQuickSell(event)">
+    <div class="modal modal-sm" id="qs-modal">
+      <button class="modal-close" onclick="closeQuickSell()">✕</button>
+      <h2 class="modal-title">💰 利確実行</h2>
+      <div class="modal-stock-name" id="qs-stock-name">--</div>
+      <div id="qs-suggestion" style="margin-bottom:14px;"></div>
+      <div class="form-group">
+        <label class="form-label">利確種別</label>
+        <select class="form-input" id="qs-type">
+          <option value="利確①">利確①（1/3売却）</option>
+          <option value="利確②">利確②（1/3売却）</option>
+          <option value="全株売却">全株売却</option>
+          <option value="損切り">損切り</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">売却価格（円） <span class="required">*</span></label>
+          <input type="number" id="qs-sell-price" class="form-input" min="1" oninput="calcQuickSellPreview()" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">売却株数 <span class="required">*</span></label>
+          <input type="number" id="qs-sell-shares" class="form-input" min="1" oninput="calcQuickSellPreview()" />
+        </div>
+      </div>
+      <div class="trade-preview" id="qs-preview" style="display:none;">
+        <div class="trade-prev-row"><span>平均取得単価</span><span id="qs-avg-disp">--</span></div>
+        <div class="trade-prev-row highlight"><span>利益率</span><span id="qs-rate" style="font-size:18px;">--</span></div>
+        <div class="trade-prev-row highlight"><span>利益額</span><span id="qs-amount" style="font-size:16px;">--</span></div>
+        <div class="trade-prev-row"><span>残り保有株数</span><span id="qs-remain">--</span></div>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="saveQuickSell()">💰 利確実行</button>
+    </div>
+  </div>
+
+  <!-- ========== Worker接続設定モーダル ========== -->
+  <div class="modal-overlay" id="worker-modal-overlay" onclick="closeWorkerSettings(event)">
+    <div class="modal modal-sm" id="worker-modal">
+      <button class="modal-close" onclick="closeWorkerSettings()">✕</button>
+      <h2 class="modal-title">☁️ Worker接続設定</h2>
+      <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">
+        Cloudflare Workerと接続して、アプリを閉じていても株価監視＆LINE通知を受け取れます。
+      </p>
+      <div class="form-group">
+        <label class="form-label">Worker URL</label>
+        <input type="url" id="worker-url-input" class="form-input" placeholder="https://positionpilot-worker.xxxxx.workers.dev" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">APIトークン</label>
+        <input type="password" id="worker-token-input" class="form-input" placeholder="デプロイ時に設定したトークン" />
+      </div>
+      <div style="display:flex; gap:8px; margin-top:16px;">
+        <button class="btn btn-ghost" onclick="testWorkerConnection()" style="flex:1;">🔍 接続テスト</button>
+        <button class="btn btn-primary" onclick="saveWorkerSettings()" style="flex:1;">💾 保存</button>
+      </div>
+      <div style="margin-top:16px; padding:12px; background:var(--bg-card-hover); border-radius:var(--radius-md); font-size:11px; color:var(--text-muted); line-height:1.6;">
+        <strong>セットアップ手順:</strong><br/>
+        1. Cloudflareアカウントを作成（無料）<br/>
+        2. <code>worker/</code> フォルダを <code>wrangler deploy</code> でデプロイ<br/>
+        3. LINE Notifyトークンを取得して設定<br/>
+        4. ここにWorker URLとトークンを入力<br/>
+        → 詳細は <code>worker/SETUP.md</code> を参照
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast通知 -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
