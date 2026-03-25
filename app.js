@@ -88,6 +88,13 @@ let themeChartInst = null;
 let profitChartInst = null;
 const stockPositionCharts = {};
 
+// ===== PWA Service Worker登録 =====
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+
 // ===== 初期化 =====
 function init() {
   // デモデータがない場合は追加
