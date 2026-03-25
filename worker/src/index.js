@@ -39,10 +39,24 @@ export default {
           return json({ error: 'stocks must be an array' }, 400);
         }
         await env.KV.put('stocks', JSON.stringify(body.stocks));
+        if (Array.isArray(body.profitLogs)) {
+          await env.KV.put('profitLogs', JSON.stringify(body.profitLogs));
+        }
         return json({ ok: true, count: body.stocks.length });
       } catch (e) {
         return json({ error: e.message }, 400);
       }
+    }
+
+    // GET /api/stocks — KVから銘柄データを取得
+    if (url.pathname === '/api/stocks' && request.method === 'GET') {
+      if (!authOk) return json({ error: 'Unauthorized' }, 401);
+      const stocksRaw = await env.KV.get('stocks');
+      const logsRaw = await env.KV.get('profitLogs');
+      return json({
+        stocks: stocksRaw ? JSON.parse(stocksRaw) : [],
+        profitLogs: logsRaw ? JSON.parse(logsRaw) : [],
+      });
     }
 
     // GET /api/status — ステータス確認
@@ -59,6 +73,19 @@ export default {
       if (!authOk) return json({ error: 'Unauthorized' }, 401);
       const results = await runPriceCheck(env);
       return json({ ok: true, results });
+    }
+
+    // POST /api/test-line — LINE通知テスト
+    if (url.pathname === '/api/test-line' && request.method === 'POST') {
+      if (!authOk) return json({ error: 'Unauthorized' }, 401);
+      try {
+        await sendLineNotify(env.LINE_CHANNEL_TOKEN,
+          `✅ PositionPilot 接続テスト\n━━━━━━━━━━━━━━\n🤖 LINE通知は正常に動作しています！\n📅 ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}\n🔗 https://zcvixs422-arch.github.io/positionpilot/`,
+          env.LINE_USER_ID);
+        return json({ ok: true, message: 'LINE送信成功' });
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
     }
 
     return json({ error: 'Not Found' }, 404);

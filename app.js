@@ -18,6 +18,31 @@ function saveWorkerConfig(config) {
   localStorage.setItem(WORKER_CONFIG_KEY, JSON.stringify(config));
 }
 
+// Workerからデータを取得（起動時）
+async function loadFromWorker() {
+  const config = getWorkerConfig();
+  if (!config || !config.url || !config.token) return false;
+  try {
+    const res = await fetch(config.url + '/api/stocks', {
+      headers: { 'Authorization': 'Bearer ' + config.token },
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (data.stocks && data.stocks.length > 0) {
+      stocks = data.stocks;
+      localStorage.setItem('pp_stocks', JSON.stringify(stocks));
+    }
+    if (data.profitLogs && data.profitLogs.length > 0) {
+      profitLogs = data.profitLogs;
+      localStorage.setItem('pp_logs', JSON.stringify(profitLogs));
+    }
+    return true;
+  } catch (e) {
+    console.warn('Worker読み込み失敗:', e.message);
+    return false;
+  }
+}
+
 // Workerへ銘柄データを同期
 async function syncToWorker() {
   const config = getWorkerConfig();
@@ -34,7 +59,7 @@ async function syncToWorker() {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + config.token,
       },
-      body: JSON.stringify({ stocks }),
+      body: JSON.stringify({ stocks, profitLogs }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '同期失敗');
@@ -96,7 +121,13 @@ if ('serviceWorker' in navigator) {
 }
 
 // ===== 初期化 =====
-function init() {
+async function init() {
+  // Worker設定があればクラウドからデータを取得
+  const loaded = await loadFromWorker();
+  if (loaded) {
+    console.log('☁️ Workerからデータを読み込みました');
+  }
+
   // デモデータがない場合は追加
   if (stocks.length === 0) {
     addDemoData();
@@ -200,7 +231,7 @@ function saveData() {
     fetch(wc.url + '/api/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + wc.token },
-      body: JSON.stringify({ stocks }),
+      body: JSON.stringify({ stocks, profitLogs }),
     }).catch(() => {});
   }
 }
