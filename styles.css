@@ -1090,7 +1090,28 @@ select.form-input option { background: #1a1b2e; color: var(--text-primary); }
   .nav-tab.active { background: transparent !important; border: none !important; color: var(--color-accent-light) !important; }
   .nav-tab.active .tab-icon { transform: scale(1.15); color: var(--color-accent-light); }
   .tab-icon { display: block !important; font-size: 20px; transition: transform var(--transition); }
-  .nav-container { justify-content: space-between; }
+  .nav-container { justify-content: space-between; padding: 0 12px; }
+
+  /* ロゴテキストを短縮 */
+  .logo-text { font-size: 15px; }
+  .logo-icon { width: 28px; height: 28px; }
+
+  /* nav-actionsを確実に表示 */
+  .nav-actions {
+    display: flex !important;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .nav-actions #sync-worker-btn {
+    font-size: 11px !important;
+    padding: 4px 8px !important;
+    white-space: nowrap;
+  }
+  .notification-btn {
+    width: 34px; height: 34px;
+    font-size: 16px;
+  }
   
   /* サマリーカードの2列化とコンパクト化 */
   .summary-grid { grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
@@ -1117,6 +1138,14 @@ select.form-input option { background: #1a1b2e; color: var(--text-primary); }
   .detail-actions { width: 100%; justify-content: space-between; display: flex; flex-wrap: wrap; }
   .detail-actions button { flex: 1 1 calc(50% - 4px); padding: 8px 4px; font-size: 12px; }
   .form-row { grid-template-columns: 1fr; }
+
+  /* 極小画面：Worker同期ボタンのテキスト非表示、アイコンのみ */
+  .nav-actions #sync-worker-btn {
+    font-size: 14px !important;
+    padding: 4px 6px !important;
+  }
+  .nav-actions #sync-worker-btn { overflow: hidden; max-width: 34px; }
+  .logo-text { display: none; }
 }
 
 /* ===== 白基調（ライトテーマ）固有の上書き ===== */
