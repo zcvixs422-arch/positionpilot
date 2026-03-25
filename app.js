@@ -389,6 +389,10 @@ function showPage(pageId) {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('page-' + pageId)?.classList.add('active');
   document.getElementById('tab-' + pageId)?.classList.add('active');
+  // モバイルボトムナビのactive更新
+  document.querySelectorAll('.mobile-bottom-nav .nav-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === pageId);
+  });
 
   if (pageId === 'dashboard') {
     setTimeout(() => updateCharts(), 100);
