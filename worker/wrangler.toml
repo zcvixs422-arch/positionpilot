@@ -9,7 +9,7 @@ crons = ["*/5 * * * *"]
 # KVストレージ（デプロイ後にIDを設定する）
 [[kv_namespaces]]
 binding = "KV"
-id = "YOUR_KV_NAMESPACE_ID_HERE"
+id = "dd7fb2e151454ad085f7dedb735d2c35"
 
 # 以下はCLIで設定（ファイルには書かない）:
 # wrangler secret put LINE_CHANNEL_TOKEN   ← Messaging APIのチャネルアクセストークン
